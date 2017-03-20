@@ -6,18 +6,18 @@
 #define PIN_VERDE_PEDESTRE 7
 #define PIN_VERMELHO_PEDESTRE 6
 
-#define PIN_SENSOR 2
+#define PIN_SENSOR A5
 #define INPUT_BUTTON 5
 //#########################################################
 
-
 #include <TimerOne.h> //Biblioteca do timer
 
-
+//########################## Declaração variáveis ##########################
 int estado = 0;
 
 int pedestre_apertou = 0;     // SE botão apertado = 1 , caso contrário = 0 
-int sensor_luz = 1 ;          // 1=> COM LUZ ; 0=> SEM LUZ
+
+int sensor_luz;               // ADC sensor luz: 0V => 0; 5V => 1023
 
 int espera = 0;               //Variável auxiliar de espera para delay entre mudanças de estados
 
@@ -28,6 +28,27 @@ int wait_pisca_noite = 0;     //Variável auxliar de espera para pisca do led AM
 
 int espera_sensor = 0;        //Variável auxiliar de espera para transição modo dia   -> noite
 int espera_sensor_noite = 0;  //Variável auxiliar de espera para transição modo noite -> dia
+
+
+//########################## Declaração de limiares ##########################
+
+int sensor_threshold = 500;       //Limiar para toggle do ADC Sensor de luz: entre 0 ~ 1023
+
+int espera_delayBotao = 100;      //Valor máximo do contador para delay do botão e acionamento do semáforo
+int espera_amareloCarro = 300;    //Valor máximo do contador para estado AMARELO para o CARRO
+int espera_verdePedestre = 700;  //Valor máximo do contador para estado VERDE para o PEDESTRE
+
+int espera_atencaoPedestre = 300; //Valor máximo do contador para estado VERMELHO PISCANTE PEDESTRE
+
+int espera_pisca_pedestre = 20;    //Período para pisca VERMLEHO PEDESTRE
+int espera_pisca_noite = 20;       //Período para pisca AMARELO CARRO
+
+int espera_diaParaNoite = 200;    //Valor máximo do contador para transição dia => noite
+int espera_noiteParaDia = 200;    //Valor máximo do contador para transição noite => dia
+
+//############################################################################
+
+
 
 void ISR_timer() { 
   
@@ -42,21 +63,21 @@ void ISR_timer() {
       
       -Transição para:
         -Estado 1: Caso botão seja apertado
-        -Estado 5: Caso sensor indique baixa luz por um dado tempo determinado por "espera_sensor"
+        -Estado 5: Caso sensor indique baixa luz por um dado tempo determinado por "espera_diaParaNoite"
              
     #################################################################
     */
     case 0:
-      if(sensor_luz == 0){
+      if(sensor_luz < sensor_threshold){
         espera_sensor = espera_sensor + 1;
     
-        if(espera_sensor == 200){
+        if(espera_sensor == espera_diaParaNoite){
           estado = 5;
           espera_sensor = 0;
         }
           
       }
-      else if (sensor_luz == 1){
+      else{
         espera_sensor = 0;
       }
         
@@ -85,7 +106,7 @@ void ISR_timer() {
 
       espera = espera + 1 ;
 
-      if (espera==20){
+      if (espera==espera_delayBotao){
         estado = 2;
         espera = 0;
       }
@@ -117,7 +138,7 @@ void ISR_timer() {
 
       espera = espera + 1 ;
 
-      if (espera==250){
+      if (espera==espera_amareloCarro){
         estado = 3;
         espera = 0;
       }
@@ -147,7 +168,7 @@ void ISR_timer() {
 
       espera = espera + 1 ;
 
-      if (espera==600){
+      if (espera==espera_verdePedestre){
         estado = 4;
         espera = 0;
       }
@@ -179,7 +200,7 @@ void ISR_timer() {
       
 
       
-      if (wait_pisca == 20){
+      if (wait_pisca == espera_pisca_pedestre){
         wait_pisca = 0;
 
         if (pisca_flag==0){
@@ -192,21 +213,20 @@ void ISR_timer() {
         }
       }
 
-      if (espera == 300){
+      if (espera == espera_atencaoPedestre){
         espera = 0;
         estado = 0;
       }
       break;
       
-    /* ########################## ESTADO 4 ##########################
+    /* ########################## ESTADO 5 ##########################
     Descrição: 
-      -Estado de atenção para o pedestre
-        1- PIN VERMELHO_PEDESCRE   = Pisca
-        2- PIN VERMELHO_CARRO      = HIGH
-        3- Todos outros PINs       = LOW
+      -Estado noturno
+        1- PIN AMARELO_CARRO       = Pisca
+        2- Todos outros PINs       = LOW
       
       -Transição para:
-        -Estado 0 Após um determinado tempo determinado pela variável "espera"
+        -Estado 0: Caso sensor indique alta luz por um dado tempo determinado por "espera_sensor"
              
     #################################################################
     */
@@ -224,7 +244,7 @@ void ISR_timer() {
           
     
           
-          if (wait_pisca_noite == 20){
+          if (wait_pisca_noite == espera_pisca_noite){
             wait_pisca_noite = 0;
     
             if (pisca_flag_noite==0){
@@ -237,16 +257,16 @@ void ISR_timer() {
             }
           }
           
-          if(sensor_luz == 1){
+          if(sensor_luz >= sensor_threshold){
             espera_sensor_noite = espera_sensor_noite + 1;
         
-            if(espera_sensor_noite == 10){
+            if(espera_sensor_noite == espera_noiteParaDia){
               estado = 0;
               espera_sensor_noite = 0;
             }
               
           }
-          else if (sensor_luz == 0){
+          else{
             espera_sensor_noite = 0;
           }  
         break;
@@ -265,14 +285,19 @@ void setup() {
   pinMode(INPUT_BUTTON, INPUT);
   pinMode(PIN_SENSOR,INPUT);
 
+  
+  Serial.begin(9600);          //  setup serial
+
 }
 
 void loop() { 
   pedestre_apertou = digitalRead(INPUT_BUTTON);   //leitura do estado do botão
-  sensor_luz = digitalRead(PIN_SENSOR);           //leitura do sensor
+  sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+  
+  Serial.println(sensor_luz);             // debug sensor_luz
 
   
-  Timer1.initialize(10000);                       // Chama interrupção a cada 100ms
+  Timer1.initialize(10000);                       // Chama interrupção periodica
   Timer1.attachInterrupt(ISR_timer);              // Associa a interrupcao periodica a funcao ISR_timer
 
 }
