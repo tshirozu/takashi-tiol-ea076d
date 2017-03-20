@@ -6,6 +6,8 @@
 #define PIN_VERDE_PEDESTRE 7
 #define PIN_VERMELHO_PEDESTRE 6
 
+#define BUZZER_PIN 2
+
 #define PIN_SENSOR A5
 #define INPUT_BUTTON 5
 //#########################################################
@@ -36,11 +38,11 @@ int sensor_threshold = 500;       //Limiar para toggle do ADC Sensor de luz: ent
 
 int espera_delayBotao = 100;      //Valor máximo do contador para delay do botão e acionamento do semáforo
 int espera_amareloCarro = 300;    //Valor máximo do contador para estado AMARELO para o CARRO
-int espera_verdePedestre = 700;  //Valor máximo do contador para estado VERDE para o PEDESTRE
+int espera_verdePedestre = 500;  //Valor máximo do contador para estado VERDE para o PEDESTRE
 
 int espera_atencaoPedestre = 300; //Valor máximo do contador para estado VERMELHO PISCANTE PEDESTRE
 
-int espera_pisca_pedestre = 20;    //Período para pisca VERMLEHO PEDESTRE
+int espera_pisca_pedestre = 30;    //Período para pisca VERMLEHO PEDESTRE
 int espera_pisca_noite = 20;       //Período para pisca AMARELO CARRO
 
 int espera_diaParaNoite = 200;    //Valor máximo do contador para transição dia => noite
@@ -86,7 +88,8 @@ void ISR_timer() {
       digitalWrite(PIN_VERDE_CARRO, HIGH); 
       digitalWrite(PIN_VERMELHO_PEDESTRE, HIGH);
       digitalWrite(PIN_VERDE_PEDESTRE, LOW);
- 
+      digitalWrite(BUZZER_PIN, LOW);
+
       if(pedestre_apertou == 1)
          estado = 1;     
       
@@ -123,7 +126,7 @@ void ISR_timer() {
         3- Todos outros PINs      = LOW
       
       -Transição para:
-        -Estado 3 Após um determinado tempo determinado pela variável "espera"
+        -Estado 3 após um determinado tempo determinado pela variável "espera"
              
     #################################################################
     */
@@ -135,6 +138,7 @@ void ISR_timer() {
       digitalWrite(PIN_VERDE_CARRO, LOW); 
       digitalWrite(PIN_VERMELHO_PEDESTRE, HIGH);
       digitalWrite(PIN_VERDE_PEDESTRE, LOW);
+      digitalWrite(BUZZER_PIN, LOW);
 
       espera = espera + 1 ;
 
@@ -154,7 +158,7 @@ void ISR_timer() {
         3- Todos outros PINs       = LOW
       
       -Transição para:
-        -Estado 4 Após um determinado tempo determinado pela variável "espera"
+        -Estado 4 Após um determinado tempo determinado pela variável "espera_verdePedestre"
              
     #################################################################
     */
@@ -165,7 +169,7 @@ void ISR_timer() {
       digitalWrite(PIN_VERDE_CARRO, LOW); 
       digitalWrite(PIN_VERMELHO_PEDESTRE, LOW);
       digitalWrite(PIN_VERDE_PEDESTRE, HIGH);
-
+      digitalWrite(BUZZER_PIN, HIGH);
       espera = espera + 1 ;
 
       if (espera==espera_verdePedestre){
@@ -194,6 +198,7 @@ void ISR_timer() {
       digitalWrite(PIN_VERDE_CARRO, LOW); 
 
       digitalWrite(PIN_VERDE_PEDESTRE, LOW);
+      digitalWrite(BUZZER_PIN, LOW);
 
       espera = espera + 1 ;
       wait_pisca = wait_pisca + 1;
@@ -205,10 +210,12 @@ void ISR_timer() {
 
         if (pisca_flag==0){
            digitalWrite(PIN_VERMELHO_PEDESTRE, HIGH);
+           digitalWrite(BUZZER_PIN, HIGH);
            pisca_flag = 1;
         }
         else if (pisca_flag == 1){
            digitalWrite(PIN_VERMELHO_PEDESTRE, LOW);
+           digitalWrite(BUZZER_PIN, LOW);
            pisca_flag = 0;
         }
       }
@@ -238,7 +245,8 @@ void ISR_timer() {
     
           digitalWrite(PIN_VERMELHO_PEDESTRE,LOW);
           digitalWrite(PIN_VERDE_PEDESTRE, LOW);
-    
+          digitalWrite(BUZZER_PIN, LOW);
+
           
           wait_pisca_noite = wait_pisca_noite + 1;
           
@@ -282,9 +290,9 @@ void setup() {
   pinMode(PIN_VERDE_CARRO, OUTPUT);
   pinMode(PIN_VERDE_PEDESTRE, OUTPUT);
   pinMode(PIN_VERMELHO_PEDESTRE, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   pinMode(INPUT_BUTTON, INPUT);
   pinMode(PIN_SENSOR,INPUT);
-
   
   Serial.begin(9600);          //  setup serial
 
