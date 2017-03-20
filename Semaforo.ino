@@ -1,3 +1,4 @@
+//########################## PINs ##########################
 #define PIN_VERMELHO_CARRO 13
 #define PIN_AMARELO_CARRO 12
 #define PIN_VERDE_CARRO 11
@@ -6,32 +7,45 @@
 #define PIN_VERMELHO_PEDESTRE 6
 
 #define PIN_SENSOR 2
-
 #define INPUT_BUTTON 5
+//#########################################################
 
 
-#include <TimerOne.h>
+#include <TimerOne.h> //Biblioteca do timer
+
 
 int estado = 0;
-int pedestre_apertou = 0;
-int sensor_luz = 1 ; // 1=> COM LUZ ; 0=> SEM LUZ
-int espera = 0;
-int pisca_flag = 0;
-int pisca_flag_noite = 0;
-int wait_pisca = 0;
-int wait_pisca_noite = 0;
 
-int espera_sensor = 0;
-int espera_sensor_noite = 0;
+int pedestre_apertou = 0;     // SE botão apertado = 1 , caso contrário = 0 
+int sensor_luz = 1 ;          // 1=> COM LUZ ; 0=> SEM LUZ
 
-void ISR_timer() {
-  // Esta implementacao usa uma estrutura de if-then-else explicita
+int espera = 0;               //Variável auxiliar de espera para delay entre mudanças de estados
 
+int pisca_flag = 0;           //Flag indicando o último estado do led VERMELHO_PEDESTRE
+int pisca_flag_noite = 0;     //Flag indicando o último estado do led AMARELO_CARRO
+int wait_pisca = 0;           //Variável auxiliar de espera para pisca do led VERMELHO_PEDESTRE
+int wait_pisca_noite = 0;     //Variável auxliar de espera para pisca do led AMARELO_CARRO
+
+int espera_sensor = 0;        //Variável auxiliar de espera para transição modo dia   -> noite
+int espera_sensor_noite = 0;  //Variável auxiliar de espera para transição modo noite -> dia
+
+void ISR_timer() { 
   
-  
-  
-
-  switch(estado){
+  switch(estado){             //instruções separadas por estado
+    
+    /* ########################## ESTADO 0 ##########################
+    Descrição: 
+      -Estado padrão
+        1- PIN VERMELHO_PEDESTRE  = HIGH
+        2- PIN VERDE_CARRO        = HIGH
+        3- Todos outros PINs      = LOW
+      
+      -Transição para:
+        -Estado 1: Caso botão seja apertado
+        -Estado 5: Caso sensor indique baixa luz por um dado tempo determinado por "espera_sensor"
+             
+    #################################################################
+    */
     case 0:
       if(sensor_luz == 0){
         espera_sensor = espera_sensor + 1;
@@ -56,6 +70,17 @@ void ISR_timer() {
          estado = 1;     
       
       break;
+      
+      
+    /* ########################## ESTADO 1 ##########################
+    Descrição: 
+      -Introduz delay após o apertar do botão
+      
+      -Transição para:
+        -Estado 2: Após um determinado tempo determinado pela variável "espera"
+             
+    #################################################################
+    */
     case 1:
 
       espera = espera + 1 ;
@@ -68,6 +93,19 @@ void ISR_timer() {
 
 
       break;
+      
+    /* ########################## ESTADO 2 ##########################
+    Descrição: 
+      -Estado de alerta para os veículos
+        1- PIN VERMELHO_PEDESTRE  = HIGH
+        2- PIN AMARELO_CARRO      = HIGH
+        3- Todos outros PINs      = LOW
+      
+      -Transição para:
+        -Estado 3 Após um determinado tempo determinado pela variável "espera"
+             
+    #################################################################
+    */
 
     case 2:
 
@@ -86,7 +124,19 @@ void ISR_timer() {
 
      
       break;
-
+      
+    /* ########################## ESTADO 3 ##########################
+    Descrição: 
+      -Estado de liberado para pedestre
+        1- PIN VERDE_PEDESTRE      = HIGH
+        2- PIN VERMELHO_CARRO      = HIGH
+        3- Todos outros PINs       = LOW
+      
+      -Transição para:
+        -Estado 4 Após um determinado tempo determinado pela variável "espera"
+             
+    #################################################################
+    */
     case 3:
 
       digitalWrite(PIN_VERMELHO_CARRO, HIGH);
@@ -102,6 +152,19 @@ void ISR_timer() {
         espera = 0;
       }
       break;
+      
+    /* ########################## ESTADO 4 ##########################
+    Descrição: 
+      -Estado de atenção para o pedestre
+        1- PIN VERMELHO_PEDESCRE   = Pisca
+        2- PIN VERMELHO_CARRO      = HIGH
+        3- Todos outros PINs       = LOW
+      
+      -Transição para:
+        -Estado 0 Após um determinado tempo determinado pela variável "espera"
+             
+    #################################################################
+    */
 
     case 4:
 
@@ -134,6 +197,19 @@ void ISR_timer() {
         estado = 0;
       }
       break;
+      
+    /* ########################## ESTADO 4 ##########################
+    Descrição: 
+      -Estado de atenção para o pedestre
+        1- PIN VERMELHO_PEDESCRE   = Pisca
+        2- PIN VERMELHO_CARRO      = HIGH
+        3- Todos outros PINs       = LOW
+      
+      -Transição para:
+        -Estado 0 Após um determinado tempo determinado pela variável "espera"
+             
+    #################################################################
+    */
 
       case 5:
         
@@ -180,8 +256,8 @@ void ISR_timer() {
 
 
 void setup() {
-  // put your setup code here, to run once:
-  pinMode(PIN_VERMELHO_CARRO, OUTPUT);
+  //Setup dos PINs utilizados
+  pinMode(PIN_VERMELHO_CARRO, OUTPUT); 
   pinMode(PIN_AMARELO_CARRO, OUTPUT); 
   pinMode(PIN_VERDE_CARRO, OUTPUT);
   pinMode(PIN_VERDE_PEDESTRE, OUTPUT);
@@ -191,20 +267,12 @@ void setup() {
 
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-  
-  pedestre_apertou = digitalRead(INPUT_BUTTON);
-  sensor_luz = digitalRead(PIN_SENSOR);
+void loop() { 
+  pedestre_apertou = digitalRead(INPUT_BUTTON);   //leitura do estado do botão
+  sensor_luz = digitalRead(PIN_SENSOR);           //leitura do sensor
 
   
-  Timer1.initialize(10000); // Interrupcao a cada 100ms
-  Timer1.attachInterrupt(ISR_timer); // Associa a interrupcao periodica a funcao ISR_timer
+  Timer1.initialize(10000);                       // Chama interrupção a cada 100ms
+  Timer1.attachInterrupt(ISR_timer);              // Associa a interrupcao periodica a funcao ISR_timer
 
-
-
-
-  //botão foi apertado  
-  //digitalWrite(PIN_VERDE_PEDESTRE, HIGH); 
-  //digitalWrite(PIN_VERMELHO_PEDESTRE, HIGH);
 }
