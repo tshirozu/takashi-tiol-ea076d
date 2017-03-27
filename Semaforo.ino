@@ -8,9 +8,9 @@
 
 #define BUZZER_PIN 2
 
-#define PIN_SENSOR A5
-#define INPUT_BUTTON 5
-//#########################################################
+#define SENSOR_PIN A5
+#define BUTTON_PIN 5
+//##########################################################################
 
 #include <TimerOne.h> //Biblioteca do timer
 
@@ -56,7 +56,7 @@ void ISR_timer() {
   
   switch(estado){             //instruções separadas por estado
     
-    /* ########################## ESTADO 0 ##########################
+    /* ########################## ESTADO 0 ##################################
     Descrição: 
       -Estado padrão
         1- PIN VERMELHO_PEDESTRE  = HIGH
@@ -67,17 +67,18 @@ void ISR_timer() {
         -Estado 1: Caso botão seja apertado
         -Estado 5: Caso sensor indique baixa luz por um dado tempo determinado por "espera_diaParaNoite"
              
-    #################################################################
+    #########################################################################
     */
     case 0:
+      
+      //Muda de estado if sensor_luz < sensor_threshold
       if(sensor_luz < sensor_threshold){
         espera_sensor = espera_sensor + 1;
     
         if(espera_sensor == espera_diaParaNoite){
           estado = 5;
           espera_sensor = 0;
-        }
-          
+        }          
       }
       else{
         espera_sensor = 0;
@@ -90,6 +91,7 @@ void ISR_timer() {
       digitalWrite(PIN_VERDE_PEDESTRE, LOW);
       digitalWrite(BUZZER_PIN, LOW);
 
+      //Troca de estado
       if(pedestre_apertou == 1)
          estado = 1;     
       
@@ -108,7 +110,8 @@ void ISR_timer() {
     case 1:
 
       espera = espera + 1 ;
-
+      
+      //Troca de estado
       if (espera==espera_delayBotao){
         estado = 2;
         espera = 0;
@@ -141,7 +144,7 @@ void ISR_timer() {
       digitalWrite(BUZZER_PIN, LOW);
 
       espera = espera + 1 ;
-
+      //Troca de estado
       if (espera==espera_amareloCarro){
         estado = 3;
         espera = 0;
@@ -172,6 +175,7 @@ void ISR_timer() {
       digitalWrite(BUZZER_PIN, HIGH);
       espera = espera + 1 ;
 
+      //Troca de estado
       if (espera==espera_verdePedestre){
         estado = 4;
         espera = 0;
@@ -204,7 +208,7 @@ void ISR_timer() {
       wait_pisca = wait_pisca + 1;
       
 
-      
+      //Toggle para pisca vermelho
       if (wait_pisca == espera_pisca_pedestre){
         wait_pisca = 0;
 
@@ -220,6 +224,7 @@ void ISR_timer() {
         }
       }
 
+      //Troca de estado
       if (espera == espera_atencaoPedestre){
         espera = 0;
         estado = 0;
@@ -251,7 +256,7 @@ void ISR_timer() {
           wait_pisca_noite = wait_pisca_noite + 1;
           
     
-          
+          //Toggle para pisca amarelo
           if (wait_pisca_noite == espera_pisca_noite){
             wait_pisca_noite = 0;
     
@@ -265,6 +270,7 @@ void ISR_timer() {
             }
           }
           
+          //Muda de estado if sensor_luz > sensor_threshold
           if(sensor_luz >= sensor_threshold){
             espera_sensor_noite = espera_sensor_noite + 1;
         
@@ -291,16 +297,16 @@ void setup() {
   pinMode(PIN_VERDE_PEDESTRE, OUTPUT);
   pinMode(PIN_VERMELHO_PEDESTRE, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(INPUT_BUTTON, INPUT);
-  pinMode(PIN_SENSOR,INPUT);
+  pinMode(BUTTON_PIN, INPUT);
+  pinMode(SENSOR_PIN,INPUT);
   
   Serial.begin(9600);          //  setup serial
 
 }
 
 void loop() { 
-  pedestre_apertou = digitalRead(INPUT_BUTTON);   //leitura do estado do botão
-  sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+  pedestre_apertou = digitalRead(BUTTON_PIN);   //leitura do estado do botão
+  sensor_luz = analogRead(SENSOR_PIN);           //leitura do sensor 0V => 0 ; 5V => 1023
   
   Serial.println(sensor_luz);             // debug sensor_luz
 
