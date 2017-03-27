@@ -2,7 +2,7 @@
 
 
 ## *ToDo:*
-	--------
+	Finalizado
 
 ### *v1p2:*
     1. Buzzer implementado;
