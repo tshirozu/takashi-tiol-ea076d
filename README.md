@@ -2,9 +2,12 @@
 
 
 ## *ToDo:*
-	1. Usar ADC "AnalogRead()" ao invés de "DigitalRead()"
+	--------
 
-
+### *v1p2:*
+    1. Buzzer implementado;
+    2. Gravação realizada;
+    3. Código comentado
 
 ### *v1p1:*
     1. Circuitos dos LEDs pedestre e carro montados e testados;
