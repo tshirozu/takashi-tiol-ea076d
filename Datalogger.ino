@@ -1,5 +1,8 @@
 /*
- * v1p0
+ * v1p1
+ * 
+ * A4 SDA
+ * A5 SCL
  */
 
 
@@ -84,12 +87,13 @@ void serialEvent() {
   
   while (Serial.available()>0) {
     c = Serial.read();
-    Serial.println("1\n");
+
     if (c=='\n') {
       buffer_add('\0'); /* Se recebeu um fim de linha, coloca um terminador de string no buffer */
       flag_check_command = 1;
-      Serial.println("2\n");
+      Serial.println("0\n");
     } else {
+     Serial.println(c);
      buffer_add(c);
     }
   }
@@ -132,30 +136,58 @@ void loop() {
   if (flag_check_command == 1) {
     if (str_cmp(Buffer.data, "PING", 4) ) {
       sprintf(out_buffer, "PONG\n");
+      
       flag_write = 1;
     }
 
     if (str_cmp(Buffer.data, "WRITE", 5) ) {
-        Wire.beginTransmission(80); // transmit to device #80 (0b 101 0000)
-        Wire.write(byte(0x10));      // sets register pointer to the command register (0x00)
-        Wire.write(byte(0x50));     
+        buffer_clean();
+        Serial.println("3\n");
+        Wire.beginTransmission(80); // transmit to device #80 (0b 0101 0000)
+        delay(50);
+        Wire.write(0x01);     // endereco dentro da memoria
+        delay(50);
+        Wire.write(0x02);     
+        delay(50);
+        Wire.write(0x03);     // dados     
+        delay(50);
+        Serial.println("@@@\n");
+
+        Serial.println(Wire.endTransmission());
+        Serial.println("!!!\n");
+
+     
         
-        Wire.endTransmission();      // stop transmitting      
-        flag_write = 1;
     }
     
     if (str_cmp(Buffer.data, "READ", 4) ) {
+        buffer_clean();
+        Serial.println("4\n");
         Wire.beginTransmission(80); // transmit to device #80 (0b 101 0000)
-        Wire.write(byte(0x10));
-        Wire.endTransmission();
+        
+        Wire.write(0x01);     // endereco dentro da memoria
+        Wire.write(0x02);     // endereco dentro da memoria
 
-        Wire.beginTransmission(80);
-        reading = Wire.read();      // sets register pointer to the command register (0x00)          
-        Wire.endTransmission();      // stop transmitting
-        Serial.println("@@@@\n");
+
+
+        
+        delay(50);    
+        Serial.println("5\n");    
+        Wire.requestFrom(80, 2);
+        Serial.println("6\n");
+
+        if(Wire.available())
+          reading = Wire.read();
+        else
+          reading = 666;
+
+        Wire.endTransmission();
+        
+        Serial.println("7\n");
         Serial.println(reading);
         Serial.println("@@@@\n");
-        flag_write = 1;
+        
+        
     }
 
     if (str_cmp(Buffer.data, "SENSOR", 5) ) {
