@@ -1,6 +1,14 @@
 /*
- * v1p1
- * 
+ * v1p2
+ 
+ Added functions:
+   WRITE: escreve as primeiras 4 paginas da memoria 24C16n
+   TESTE: escreve as primeiras 4 paginas da memoria 24C16n
+   READ: le as primeiras 4 paginas da memoria 24C16n
+ 
+ 
+ 
+ * PINS:
  * A4 SDA
  * A5 SCL
  */
@@ -100,6 +108,7 @@ void serialEvent() {
 }
 
 /* Funcoes internas ao void main() */
+const byte DEVADDR = 0x50;
 
 void setup() {
   /* Inicializacao */
@@ -107,6 +116,7 @@ void setup() {
   
   buffer_clean();
   flag_check_command = 0;
+  Wire.begin();
   Serial.begin(9600);
 
   pinMode(PIN_SENSOR,INPUT);
@@ -140,62 +150,133 @@ void loop() {
       flag_write = 1;
     }
 
+    if(str_cmp(Buffer.data,"ERASE",5)){
+      buffer_clean();
+      Serial.println("Begin erasing process....\n");
+      eeprom_erase_page(DEVADDR,0x000);
+      eeprom_erase_page(DEVADDR,0x010);
+      eeprom_erase_page(DEVADDR,0x020);
+      eeprom_erase_page(DEVADDR,0x030);
+      Serial.println("Memory erased\n");
+    }
+
     if (str_cmp(Buffer.data, "WRITE", 5) ) {
         buffer_clean();
-        Serial.println("3\n");
-        Wire.beginTransmission(80); // transmit to device #80 (0b 0101 0000)
-        delay(50);
-        Wire.write(0x01);     // endereco dentro da memoria
-        delay(50);
-        Wire.write(0x02);     
-        delay(50);
-        Wire.write(0x03);     // dados     
-        delay(50);
-        Serial.println("@@@\n");
+        Serial.println("Begin writing process....\n");
 
-        Serial.println(Wire.endTransmission());
-        Serial.println("!!!\n");
-
-     
+        byte msg0[] = "This is msg 0";
+        byte msg1[] = "Hello World!";
+        byte msg2[] = "Howdy!";
+        byte msg3[] = "LeeeroyJenkins";
+        
+        eeprom_write_page(DEVADDR,0x000,msg0, sizeof(msg0));
+        eeprom_write_page(DEVADDR,0x010,msg1, sizeof(msg1));
+        eeprom_write_page(DEVADDR,0x020,msg2, sizeof(msg2));
+        eeprom_write_page(DEVADDR,0x030,msg3, sizeof(msg3));
+        
+        Serial.println("Memory written\n");    
         
     }
+
+    if (str_cmp(Buffer.data, "TESTE", 5) ) {
+        buffer_clean();
+        Serial.println("Begin writing process....\n");
+
+        byte msg0[] = "0123456789";
+        byte msg1[] = "9876543210";
+        byte msg2[] = "ABCDEFGHIJ";
+        byte msg3[] = "KLMNOPQRST";
+        
+        eeprom_write_page(DEVADDR,0x000,msg0, sizeof(msg0));
+        eeprom_write_page(DEVADDR,0x010,msg1, sizeof(msg1));
+        eeprom_write_page(DEVADDR,0x020,msg2, sizeof(msg2));
+        eeprom_write_page(DEVADDR,0x030,msg3, sizeof(msg3));
+        
+        Serial.println("Memory written\n");    
+        
+    }
+
     
     if (str_cmp(Buffer.data, "READ", 4) ) {
         buffer_clean();
-        Serial.println("4\n");
-        Wire.beginTransmission(80); // transmit to device #80 (0b 101 0000)
-        
-        Wire.write(0x01);     // endereco dentro da memoria
-        Wire.write(0x02);     // endereco dentro da memoria
+        Serial.println("Begin reading process... \n");
 
-
-
+        char readMsg[4][16];
         
-        delay(50);    
-        Serial.println("5\n");    
-        Wire.requestFrom(80, 2);
-        Serial.println("6\n");
-
-        if(Wire.available())
-          reading = Wire.read();
-        else
-          reading = 666;
-
-        Wire.endTransmission();
-        
-        Serial.println("7\n");
-        Serial.println(reading);
-        Serial.println("@@@@\n");
-        
-        
+        for (int itMsg = 0 ; itMsg<4; itMsg++)
+        {
+          char outBuffer[16];
+          sprintf(outBuffer,"\nMessage %d is:\n",itMsg);
+          Serial.println(outBuffer);
+          for (int i = itMsg*16; i < itMsg*16+16; i++) {
+            byte b = eeprom_read_byte(DEVADDR, i);
+            readMsg[itMsg][i] = b;
+            Serial.print(readMsg[itMsg][i]);
+          }
+          Serial.println("\n");
+        }       
+        Serial.println("Memory readed\n");
     }
 
     if (str_cmp(Buffer.data, "SENSOR", 5) ) {
-      sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
-      sprintf(out_buffer, "%d", sensor_luz);
-      flag_write = 1;
+        sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+        sprintf(out_buffer, "%d", sensor_luz);
+        flag_write = 1;
     }
     flag_check_command = 0;
+
+
+    
+    if (str_cmp(Buffer.data,"MEASURE",7))
+    {
+      Serial.println("Begin MEASURE process... \n");
+
+
+      
+      buffer_clean();
+      Serial.println("End MEASURE process\n");
+    }
+    
+    if (str_cmp(Buffer.data,"MEMSTATUS",9))
+    {
+      Serial.println("Begin MEMSTATUS process... \n");
+
+
+      
+      buffer_clean();
+      Serial.println("End MEMSTATUS process\n");
+    }
+    
+    if (str_cmp(Buffer.data,"RESET",5))
+    {
+      Serial.println("Begin RESET process... \n");
+
+
+      
+      buffer_clean();
+      Serial.println("End RESET process\n");
+    }
+    
+    if (str_cmp(Buffer.data,"RECORD",7))
+    {
+      Serial.println("Begin RECORD process... \n");
+
+      
+      buffer_clean();
+      Serial.println("End RECORD process\n");
+    }
+    
+    if (str_cmp(Buffer.data,"GET ",4))
+    {
+      Serial.println("Begin GET process... \n");
+
+
+
+      
+      buffer_clean();
+      Serial.println("End GET process\n");
+    }
+    
   }
 
   /* Posso construir uma dessas estruturas if(flag) para cada funcionalidade
@@ -209,4 +290,51 @@ void loop() {
     flag_write = 0;
   }
 
+
+}
+
+
+
+void eeprom_write_page(byte deviceaddress, unsigned eeaddr,
+                      const byte * data, byte length)
+{
+   // Three lsb of Device address byte are bits 8-10 of eeaddress
+   byte devaddr = deviceaddress | ((eeaddr >> 8) & 0x07);
+   byte addr    = eeaddr;
+   Wire.beginTransmission(devaddr);
+   Wire.write(int(addr));
+   for (int i = 0; i < length; i++) {
+       Wire.write(data[i]);
+   }
+   Wire.endTransmission();
+   delay(10);
+}
+
+void eeprom_erase_page(byte deviceaddress,unsigned eeaddr)
+{
+   byte msgf[16] = {
+       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+   };
+   eeprom_write_page(deviceaddress, eeaddr, msgf, 16);
+}
+
+
+
+int eeprom_read_byte(byte deviceaddress, unsigned eeaddr)
+{
+   byte rdata = -1;
+
+   // Three lsb of Device address byte are bits 8-10 of eeaddress
+   byte devaddr = deviceaddress | ((eeaddr >> 8) & 0x07);
+   byte addr    = eeaddr;
+
+   Wire.beginTransmission(devaddr);
+   Wire.write(int(addr));
+   Wire.endTransmission();
+   Wire.requestFrom(int(devaddr), 1);
+   if (Wire.available()) {
+       rdata = Wire.read();
+   }
+   return rdata;
 }
