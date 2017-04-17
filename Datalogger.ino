@@ -1,5 +1,5 @@
 /*
- * v1p2
+ * v1p3
  
  Added functions:
    WRITE: escreve as primeiras 4 paginas da memoria 24C16n
@@ -21,11 +21,12 @@
 #include <TimerOne.h> //Biblioteca do timer
 #include <stdio.h>
 #include <Wire.h>
+#include <stdint.h>
 
 /* Variaveis globais */
-
 int sensor_luz = 0;
 int reading = 0;
+int memCount = 0;
 
 
 /* Rotina auxiliar para comparacao de strings */
@@ -116,9 +117,13 @@ void setup() {
   
   buffer_clean();
   flag_check_command = 0;
+  
   Wire.begin();
   Serial.begin(9600);
 
+  for(int i = 0; i<16*24 ;i+=16)
+    eeprom_erase_page(DEVADDR,i);      
+      
   pinMode(PIN_SENSOR,INPUT);
 }
 
@@ -149,16 +154,11 @@ void loop() {
       
       flag_write = 1;
     }
-
-    if(str_cmp(Buffer.data,"ERASE",5)){
-      buffer_clean();
-      Serial.println("Begin erasing process....\n");
-      eeprom_erase_page(DEVADDR,0x000);
-      eeprom_erase_page(DEVADDR,0x010);
-      eeprom_erase_page(DEVADDR,0x020);
-      eeprom_erase_page(DEVADDR,0x030);
-      Serial.println("Memory erased\n");
+    if (str_cmp(Buffer.data, "ID", 2) ) {
+      sprintf(out_buffer, "DATALOGGER DA ZOEIRA \n");
+      flag_write = 1;
     }
+
 
     if (str_cmp(Buffer.data, "WRITE", 5) ) {
         buffer_clean();
@@ -203,11 +203,12 @@ void loop() {
 
         char readMsg[4][16];
         
-        for (int itMsg = 0 ; itMsg<4; itMsg++)
+        for (int itMsg = 0 ; itMsg<24; itMsg++)
         {
           char outBuffer[16];
           sprintf(outBuffer,"\nMessage %d is:\n",itMsg);
           Serial.println(outBuffer);
+          
           for (int i = itMsg*16; i < itMsg*16+16; i++) {
             byte b = eeprom_read_byte(DEVADDR, i);
             readMsg[itMsg][i] = b;
@@ -218,20 +219,14 @@ void loop() {
         Serial.println("Memory readed\n");
     }
 
-    if (str_cmp(Buffer.data, "SENSOR", 5) ) {
-        sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
-        sprintf(out_buffer, "%d", sensor_luz);
-        flag_write = 1;
-    }
-    flag_check_command = 0;
-
 
     
     if (str_cmp(Buffer.data,"MEASURE",7))
     {
       Serial.println("Begin MEASURE process... \n");
-
-
+      sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+      sprintf(out_buffer, "%d", sensor_luz);
+      flag_write = 1;
       
       buffer_clean();
       Serial.println("End MEASURE process\n");
@@ -240,9 +235,8 @@ void loop() {
     if (str_cmp(Buffer.data,"MEMSTATUS",9))
     {
       Serial.println("Begin MEMSTATUS process... \n");
-
-
-      
+      sprintf(out_buffer, "%d", memCount);
+            
       buffer_clean();
       Serial.println("End MEMSTATUS process\n");
     }
@@ -251,8 +245,10 @@ void loop() {
     {
       Serial.println("Begin RESET process... \n");
 
+      for(int i = 0; i<16*24 ;i+=16)
+        eeprom_erase_page(DEVADDR,i);      
 
-      
+      memCount = 0;
       buffer_clean();
       Serial.println("End RESET process\n");
     }
@@ -260,7 +256,17 @@ void loop() {
     if (str_cmp(Buffer.data,"RECORD",7))
     {
       Serial.println("Begin RECORD process... \n");
+      sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+      sprintf(out_buffer, "%d", sensor_luz);
+      flag_write = 1;
+      eeprom_erase_page(DEVADDR,memCount);
+      eeprom_write_page(DEVADDR,memCount,out_buffer, 4);
 
+      
+
+      if(memCount < 24*(16-1))
+        memCount+=16;
+        
       
       buffer_clean();
       Serial.println("End RECORD process\n");
@@ -269,13 +275,42 @@ void loop() {
     if (str_cmp(Buffer.data,"GET ",4))
     {
       Serial.println("Begin GET process... \n");
-
-
-
+      int x = 0;
+      int y = -1;
+      int unidade;
+      int dezena = 0;
+      sscanf(Buffer.data, "%*s %d %d", &x, &y);
       
-      buffer_clean();
+      if(y == -1)
+      {
+        unidade = x;
+      }
+      else
+      {
+        unidade = y;
+        dezena = x;
+      }
+      
+      
+      int memPage = unidade + dezena*10;
+
+
+
+      int j = 0;
+      for (int i = memPage*16; i < memPage*16+4; i++) {
+            byte b = eeprom_read_byte(DEVADDR, i);
+            char aux = b;
+            
+            
+            out_buffer[j] = aux;
+            j++;       
+//            Serial.print(aux);
+      }
+      Serial.println("\n");     
+      flag_write = 1;     
       Serial.println("End GET process\n");
     }
+    flag_check_command = 0;
     
   }
 
