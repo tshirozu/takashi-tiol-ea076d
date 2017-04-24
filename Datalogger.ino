@@ -1,5 +1,7 @@
 /*
- * v1p3
+ * v1p4
+ 
+ Added readMatrixKeyboard function;
  
  Added functions:
    WRITE: escreve as primeiras 4 paginas da memoria 24C16n
@@ -9,12 +11,30 @@
  
  
  * PINS:
- * A4 SDA
- * A5 SCL
+ * A0 SENSOR
+ * A4 SDA azul
+ * A5 SCL branco
+ * 
+ * D0 -> R0
+ * D1 -> R1
+ * D2 -> R2
+ * D3 -> R3
+ * D4 -> C0
+ * D5 -> C1
+ * D6 -> C2
+ * D7
+ * D8
  */
 
 
 #define PIN_SENSOR A0
+#define PIN_R0 0
+#define PIN_R1 1
+#define PIN_R2 2
+#define PIN_R3 3
+#define PIN_C0 4
+#define PIN_C1 5
+#define PIN_C2 6
 
  //#########################################################
 
@@ -27,6 +47,10 @@
 int sensor_luz = 0;
 int reading = 0;
 int memCount = 0;
+
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+int lastButtonState = 0;
 
 
 /* Rotina auxiliar para comparacao de strings */
@@ -100,9 +124,9 @@ void serialEvent() {
     if (c=='\n') {
       buffer_add('\0'); /* Se recebeu um fim de linha, coloca um terminador de string no buffer */
       flag_check_command = 1;
-      Serial.println("0\n");
+//      Serial.println("0\n");
     } else {
-     Serial.println(c);
+//     Serial.println(c);
      buffer_add(c);
     }
   }
@@ -125,6 +149,7 @@ void setup() {
     eeprom_erase_page(DEVADDR,i);      
       
   pinMode(PIN_SENSOR,INPUT);
+  pinMode(P
 }
 
 
@@ -132,6 +157,9 @@ void loop() {
   int x, y;
   char out_buffer[10];
   int flag_write = 0;
+
+  int matrixKeyboard = readMatrixKeyboard();
+  Serial.print(matrixKeyboard);
   
 
   
@@ -235,7 +263,8 @@ void loop() {
     if (str_cmp(Buffer.data,"MEMSTATUS",9))
     {
       Serial.println("Begin MEMSTATUS process... \n");
-      sprintf(out_buffer, "%d", memCount);
+      sprintf(out_buffer, "%d", memCount/16);
+      flag_write = 1;
             
       buffer_clean();
       Serial.println("End MEMSTATUS process\n");
@@ -276,35 +305,18 @@ void loop() {
     {
       Serial.println("Begin GET process... \n");
       int x = 0;
-      int y = -1;
-      int unidade;
-      int dezena = 0;
-      sscanf(Buffer.data, "%*s %d %d", &x, &y);
+      sscanf(Buffer.data, "%*s %d", &x);
+            
+      int memPage = x;
       
-      if(y == -1)
-      {
-        unidade = x;
-      }
-      else
-      {
-        unidade = y;
-        dezena = x;
-      }
-      
-      
-      int memPage = unidade + dezena*10;
-
-
-
       int j = 0;
       for (int i = memPage*16; i < memPage*16+4; i++) {
             byte b = eeprom_read_byte(DEVADDR, i);
             char aux = b;
-            
-            
+                        
             out_buffer[j] = aux;
             j++;       
-//            Serial.print(aux);
+            Serial.print(aux);
       }
       Serial.println("\n");     
       flag_write = 1;     
@@ -328,7 +340,100 @@ void loop() {
 
 }
 
+int readMatrixKeyboard()
+{
+    int numCol = 3;
+    int numRow = 4;
 
+    int i = 0;
+    int j = 0;
+
+    int temp = 0;
+
+
+    for(i=0;i<numRow;i++)
+    {
+      switch(i)
+      {
+        case 0:
+          digitalWrite(PIN_R0,HIGH);
+          digitalWrite(PIN_R1,LOW);
+          digitalWrite(PIN_R2,LOW);
+          digitalWrite(PIN_R3,LOW);          
+          break;
+        case 1:          
+          digitalWrite(PIN_R0,LOW);
+          digitalWrite(PIN_R1,HIGH);
+          digitalWrite(PIN_R2,LOW);
+          digitalWrite(PIN_R3,LOW);          
+          break;
+        case 2:
+          digitalWrite(PIN_R0,LOW);
+          digitalWrite(PIN_R1,LOW);
+          digitalWrite(PIN_R2,HIGH);
+          digitalWrite(PIN_R3,LOW);          
+          break;
+        case 3:
+          digitalWrite(PIN_R0,LOW);
+          digitalWrite(PIN_R1,LOW);
+          digitalWrite(PIN_R2,LOW);
+          digitalWrite(PIN_R3,HIGH);          
+          break;
+        }
+        delay(50);
+      
+      for(j=0;j<numCol;j++)
+      {
+        switch(j)
+        {
+          case 0:
+            int k = 0;
+            for(k=0;k<20;k++)
+            {
+              temp = digitalRead(PIN_C0);
+              if (temp != lastButtonState) {
+                 // reset the debouncing timer
+                lastDebounceTime = millis();
+              }
+              if ((millis() - lastDebounceTime) > debounceDelay) {
+                if(temp!=0)
+                  return(3*i+j);  
+              }       
+            }           
+            break;
+          case 1:
+            int k = 0;
+            for(k=0;k<20;k++)
+            {
+              temp = digitalRead(PIN_C1);
+              if (temp != lastButtonState) {
+                 // reset the debouncing timer
+                lastDebounceTime = millis();
+              }
+              if ((millis() - lastDebounceTime) > debounceDelay) {
+                if(temp!=0)
+                  return(3*i+j);  
+              }       
+            }
+          case 2:
+           int k = 0;
+            for(k=0;k<20;k++)
+            {
+              temp = digitalRead(PIN_C2);
+              if (temp != lastButtonState) {
+                 // reset the debouncing timer
+                lastDebounceTime = millis();
+              }
+              if ((millis() - lastDebounceTime) > debounceDelay) {
+                if(temp!=0)
+                  return(3*i+j);  
+              }       
+            }                  
+        }        
+      }
+      return -1;
+    }
+}
 
 void eeprom_write_page(byte deviceaddress, unsigned eeaddr,
                       const byte * data, byte length)
