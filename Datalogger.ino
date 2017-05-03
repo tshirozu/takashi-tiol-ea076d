@@ -1,5 +1,7 @@
 /*
- * v1p4
+ * v1p5
+ 
+ Todo: only one time execution when button pressed
  
  Added readMatrixKeyboard function;
  
@@ -15,26 +17,26 @@
  * A4 SDA azul
  * A5 SCL branco
  * 
- * D0 -> R0
- * D1 -> R1
- * D2 -> R2
- * D3 -> R3
- * D4 -> C0
- * D5 -> C1
- * D6 -> C2
- * D7
- * D8
+ * D11 -> R0
+ * D10 -> R1
+ * D9  -> R2
+ * D8  -> R3
+ 
+ * D5 -> C2
+ * D6 -> C1
+ * D7 -> C0
+ 
  */
 
 
 #define PIN_SENSOR A0
-#define PIN_R0 0
-#define PIN_R1 1
-#define PIN_R2 2
-#define PIN_R3 3
-#define PIN_C0 4
-#define PIN_C1 5
-#define PIN_C2 6
+#define PIN_R0 11
+#define PIN_R1 10
+#define PIN_R2 9
+#define PIN_R3 8
+#define PIN_C0 7
+#define PIN_C1 6
+#define PIN_C2 5
 
  //#########################################################
 
@@ -47,9 +49,10 @@
 int sensor_luz = 0;
 int reading = 0;
 int memCount = 0;
+int maxBounceCount = 100;
 
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
-unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+unsigned long debounceDelay = 10;    // the debounce time; increase if the output flickers
 int lastButtonState = 0;
 
 
@@ -149,17 +152,33 @@ void setup() {
     eeprom_erase_page(DEVADDR,i);      
       
   pinMode(PIN_SENSOR,INPUT);
-  pinMode(P
+  pinMode(PIN_R0,OUTPUT);
+  pinMode(PIN_R1,OUTPUT);
+  pinMode(PIN_R2,OUTPUT);
+  pinMode(PIN_R3,OUTPUT);
+
+  pinMode(PIN_C0,INPUT);
+  pinMode(PIN_C1,INPUT);
+  pinMode(PIN_C2,INPUT);
 }
 
 
 void loop() {
   int x, y;
   char out_buffer[10];
+
   int flag_write = 0;
 
   int matrixKeyboard = readMatrixKeyboard();
-  Serial.print(matrixKeyboard);
+
+  if(matrixKeyboard != -1)
+  {
+
+    Serial.print("Matrix Keyboard read: \n");
+    Serial.print(matrixKeyboard);
+    Serial.print("\n");  
+  }
+  
   
 
   
@@ -342,17 +361,21 @@ void loop() {
 
 int readMatrixKeyboard()
 {
+    
+    
     int numCol = 3;
     int numRow = 4;
 
     int i = 0;
     int j = 0;
+    int k = 0;
 
     int temp = 0;
 
 
     for(i=0;i<numRow;i++)
     {
+
       switch(i)
       {
         case 0:
@@ -380,20 +403,25 @@ int readMatrixKeyboard()
           digitalWrite(PIN_R3,HIGH);          
           break;
         }
-        delay(50);
+        delay(100);
       
       for(j=0;j<numCol;j++)
       {
         switch(j)
         {
           case 0:
-            int k = 0;
-            for(k=0;k<20;k++)
+            
+            for(k=0;k<maxBounceCount;k++)
             {
+              
               temp = digitalRead(PIN_C0);
-              if (temp != lastButtonState) {
+              
+              
+              if (temp != 0) {
                  // reset the debouncing timer
                 lastDebounceTime = millis();
+                j = 0;
+                return(3*i+j);  //NO DEBOUNCE
               }
               if ((millis() - lastDebounceTime) > debounceDelay) {
                 if(temp!=0)
@@ -402,13 +430,16 @@ int readMatrixKeyboard()
             }           
             break;
           case 1:
-            int k = 0;
-            for(k=0;k<20;k++)
+            
+            for(k=0;k<maxBounceCount;k++)
             {
               temp = digitalRead(PIN_C1);
-              if (temp != lastButtonState) {
+
+              if (temp != 0) {
                  // reset the debouncing timer
                 lastDebounceTime = millis();
+                j = 1;
+                return(3*i+j);  //NO DEBOUNCE
               }
               if ((millis() - lastDebounceTime) > debounceDelay) {
                 if(temp!=0)
@@ -416,13 +447,17 @@ int readMatrixKeyboard()
               }       
             }
           case 2:
-           int k = 0;
-            for(k=0;k<20;k++)
+           
+            for(k=0;k<maxBounceCount;k++)
             {
               temp = digitalRead(PIN_C2);
-              if (temp != lastButtonState) {
+
+              if (temp != 0) {
                  // reset the debouncing timer
                 lastDebounceTime = millis();
+                j = 2;
+               
+                return(3*i+j);  //NO DEBOUNCE
               }
               if ((millis() - lastDebounceTime) > debounceDelay) {
                 if(temp!=0)
@@ -430,9 +465,9 @@ int readMatrixKeyboard()
               }       
             }                  
         }        
-      }
-      return -1;
+      }      
     }
+    return -1;
 }
 
 void eeprom_write_page(byte deviceaddress, unsigned eeaddr,
