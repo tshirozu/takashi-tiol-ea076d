@@ -1,15 +1,7 @@
 /*
- * v1p6
+ * v1p7
  
- Todo: Comentar
- 
- Added readMatrixKeyboard function;
- 
- Added functions:
-   WRITE: escreve as primeiras 4 paginas da memoria 24C16n
-   TESTE: escreve as primeiras 4 paginas da memoria 24C16n
-   READ: le as primeiras 4 paginas da memoria 24C16n
- 
+ ToDo: -
  
  
  * PINS:
@@ -38,6 +30,7 @@
 #define PIN_C1 6
 #define PIN_C2 5
 #define PIN_LED 2
+#define MAX_BUFFER_SIZE 15
 
  //#########################################################
 
@@ -57,6 +50,10 @@ int flagLastButtonState[12] = {0, 0, 0, 0, 0 ,0 ,0 ,0 ,0 ,0 ,0 ,0};   //Ultimo e
 char matrix_buffer[10];                                               //Buffer para armazenar os comandos do teclado matricial
 int matrix_buffer_counter = 0;                                        //Contador do buffer
 
+const byte DEVADDR = 0x50;                                            //Endereco do componente AT24c16 (com bits de ID em GND)
+
+volatile int flag_check_command = 0;                                  //Flag de controle de interrupcao
+
 
 /* Rotina auxiliar para comparacao de strings */
 int str_cmp(char *s1, char *s2, int len) {
@@ -73,7 +70,7 @@ int str_cmp(char *s1, char *s2, int len) {
 
 
 /* Buffer de dados recebidos */
-#define MAX_BUFFER_SIZE 15
+
 typedef struct {
   volatile char data[MAX_BUFFER_SIZE];
   unsigned int tam_buffer;
@@ -96,9 +93,6 @@ int buffer_add(char c_in) {
 }
 
 
-/* Flags globais para controle de processos da interrupcao */
-volatile int flag_check_command = 0;
-
 /* Rotinas de interrupcao */
 
 /* Ao receber evento da UART */
@@ -120,7 +114,7 @@ void serialEvent() {
 }
 
 /* Funcoes internas ao void main() */
-const byte DEVADDR = 0x50;
+
 
 void setup() {
   /* Inicializacao */
@@ -189,11 +183,12 @@ void loop() {
    */
 
    if(str_cmp(matrix_buffer,"#1*",3))                               //Comando #1*
-   {
+   {      
       digitalWrite(PIN_LED,HIGH);                                   //Pisca o LED
       delay(2000);
       digitalWrite(PIN_LED,LOW);
       sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
+      
    }
    if(str_cmp(matrix_buffer,"#2*",3))                               //Comando #2*
    {
@@ -223,36 +218,28 @@ void loop() {
       sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
       
    }
-
-   /* A flag_check_command permite separar a recepcao de caracteres
-   *  (vinculada a interrupca) da interpretacao de caracteres. Dessa forma,
-   *  mantemos a rotina de interrupcao mais enxuta, enquanto o processo de
-   *  interpretacao de comandos - mais lento - nao impede a recepcao de
-   *  outros caracteres. Como o processo nao 'prende' a maquina, ele e chamado
-   *  de nao-preemptivo.
-   */
-
    
   /*
    * COMANDOS DO TERMINAL SERIAL
    */
 
    
-  if (flag_check_command == 1) {
-    if (str_cmp(Buffer.data, "PING", 4) ) {
-      sprintf(out_buffer, "PONG\n");
-      
+  if (flag_check_command == 1) {                                    
+    if (str_cmp(Buffer.data, "PING", 4) ) {                         //Funcao: PING
+      buffer_clean();
+      sprintf(out_buffer, "PONG\n");                                //Retorna PONG
       flag_write = 1;
     }
-    if (str_cmp(Buffer.data, "ID", 2) ) {
-      sprintf(out_buffer, "DATALOGGER DA ZOEIRA \n");
+    if (str_cmp(Buffer.data, "ID", 2) ) {                           //Funcao: ID
+      buffer_clean();
+      sprintf(out_buffer, "DATALOGGER EA076\n");                    //Retorna um identificador do DATALOGGER
       flag_write = 1;
     }
 
-    if (str_cmp(Buffer.data, "TESTE", 5) ) {
-        buffer_clean();
-        Serial.println("Begin writing process....\n");
-
+    if (str_cmp(Buffer.data, "TESTE", 5) ) {                        //Funcao TESTE      
+        buffer_clean();                                     
+        Serial.println("Begin writing process....\n");              //Write 4 dummy messages na memoria eeprom
+                                                                    //Obs.: funcao utilizada para debug da memoria eeprom
         byte msg0[] = "0123456789";
         byte msg1[] = "9876543210";
         byte msg2[] = "ABCDEFGHIJ";
@@ -263,17 +250,13 @@ void loop() {
         eeprom_write_page(DEVADDR,0x020,msg2, sizeof(msg2));
         eeprom_write_page(DEVADDR,0x030,msg3, sizeof(msg3));
         
-        Serial.println("Memory written\n");    
-        
+        Serial.println("Memory written\n");            
     }
-
     
-    if (str_cmp(Buffer.data, "READ", 4) ) {
+    if (str_cmp(Buffer.data, "READ", 4) ) {                        //Funcao READ
+        Serial.println("Begin reading process... \n");             //Retorna as 24 mensagens na memoria eeprom
         buffer_clean();
-        Serial.println("Begin reading process... \n");
-
-        char readMsg[4][16];
-        
+        char readMsg[24][16];                                      //Obs.: funcao utilizada para debug da memoria eeprom   
         for (int itMsg = 0 ; itMsg<24; itMsg++)
         {
           char outBuffer[16];
@@ -292,60 +275,57 @@ void loop() {
 
 
     
-    if (str_cmp(Buffer.data,"MEASURE",7))
-    {
+    if (str_cmp(Buffer.data,"MEASURE",7))                         //Funcao MEASURE:
+    {                                                             //Retorna valor do SENSOR de luz
       Serial.println("Begin MEASURE process... \n");
       sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
-      sprintf(out_buffer, "%d", sensor_luz);
+      sprintf(out_buffer, "%d \n", sensor_luz);
       flag_write = 1;
       
-      buffer_clean();
       Serial.println("End MEASURE process\n");
     }
     
-    if (str_cmp(Buffer.data,"MEMSTATUS",9))
-    {
+    if (str_cmp(Buffer.data,"MEMSTATUS",9))                       //Funcao MEMSTATUS:
+    {                                                             //Retorna contador de mensagens na memoria eeprom
+      buffer_clean();
       Serial.println("Begin MEMSTATUS process... \n");
-      sprintf(out_buffer, "%d", memCount/16);
+      sprintf(out_buffer, "%d \n", memCount/16);
       flag_write = 1;
             
-      buffer_clean();
       Serial.println("End MEMSTATUS process\n");
     }
     
-    if (str_cmp(Buffer.data,"RESET",5))
-    {
+    if (str_cmp(Buffer.data,"RESET",5))                         //Funcao RESET:
+    {                                                           //Clean a memoria eeprom
+      buffer_clean();
       Serial.println("Begin RESET process... \n");
 
       for(int i = 0; i<16*24 ;i+=16)
         eeprom_erase_page(DEVADDR,i);      
 
       memCount = 0;
-      buffer_clean();
       Serial.println("End RESET process\n");
     }
     
-    if (str_cmp(Buffer.data,"RECORD",7))
-    {
-      Serial.println("Begin RECORD process... \n");
-      sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
-      sprintf(out_buffer, "%d", sensor_luz);
-      flag_write = 1;
-      eeprom_erase_page(DEVADDR,memCount);
-      eeprom_write_page(DEVADDR,memCount,out_buffer, 4);
-
-      
-
-      if(memCount < 24*(16-1))
-        memCount+=16;
-        
-      
+    if (str_cmp(Buffer.data,"RECORD",7))                        //Funcao RECORD
+    {                                                           //Realiza a medicao do sensor e armazena na memoria eeprom
       buffer_clean();
+      Serial.println("Begin RECORD process... \n");
+      sensor_luz = analogRead(PIN_SENSOR);                      //leitura do sensor 0V => 0 ; 5V => 1023
+      sprintf(out_buffer, "%d \n", sensor_luz);
+      flag_write = 1;
+      eeprom_erase_page(DEVADDR,memCount);                      //limpa a posicao de memoria a ser escrita
+      eeprom_write_page(DEVADDR,memCount,out_buffer, 4);        //escreve na pagina de memoria
+
+      if(memCount < 24*(16-1))                                  //Caso atinja-se o final da memoria, a ultima pagina sera sobrescrita
+        memCount+=16;
+                
       Serial.println("End RECORD process\n");
     }
     
-    if (str_cmp(Buffer.data,"GET ",4))
-    {
+    if (str_cmp(Buffer.data,"GET ",4))                          //Funcao GET (int n) 
+    {                                                           //Retorna valor da pagina "n" da memoria eeprom
+      buffer_clean();
       Serial.println("Begin GET process... \n");
       int x = 0;
       sscanf(Buffer.data, "%*s %d", &x);
@@ -353,7 +333,7 @@ void loop() {
       int memPage = x;
       
       int j = 0;
-      for (int i = memPage*16; i < memPage*16+4; i++) {
+      for (int i = memPage*16; i < memPage*16+4; i++) {        //Cada pagina possui 16 bytes, é alocado 4 bytes para o valor de escrita
             byte b = eeprom_read_byte(DEVADDR, i);
             char aux = b;
                         
@@ -369,18 +349,13 @@ void loop() {
     
   }
 
-  /* Posso construir uma dessas estruturas if(flag) para cada funcionalidade
-   *  do sistema. Nesta a seguir, flag_write e habilitada sempre que alguma outra
-   *  funcionalidade criou uma requisicao por escrever o conteudo do buffer na
-   *  saida UART.
-   */
   if (flag_write == 1) {
     Serial.write(out_buffer);
     buffer_clean();
     flag_write = 0;
   }
 
-  if(flag_RecordAutomatico == 1 && (millis()-lastRecord) > 1000)
+  if(flag_RecordAutomatico == 1 && (millis()-lastRecord) > 1000)                              //Funcao de RECORD automatico, periodicidade de ~1s
   {
       Serial.println("Begin RECORD process... \n");
       sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
@@ -395,7 +370,7 @@ void loop() {
   }
 }
 
-int convMatrixKeyboard(int a)
+int convMatrixKeyboard(int a)                                                             //Realiza conversao para mais facil manipulacao
 {
   switch(a)
   {
@@ -411,10 +386,8 @@ int convMatrixKeyboard(int a)
   }
 }
 
-int readMatrixKeyboard()
-{
-    
-    
+int readMatrixKeyboard()                                                            //Retorna um index para cada botao do teclado matricial
+{      
     int numCol = 3;
     int numRow = 4;
 
@@ -424,8 +397,7 @@ int readMatrixKeyboard()
 
     int temp = 0;
 
-
-    for(i=0;i<numRow;i++)
+    for(i=0;i<numRow;i++)                                                       //Sweep nas linhas
     {
 
       switch(i)
@@ -455,76 +427,60 @@ int readMatrixKeyboard()
           digitalWrite(PIN_R3,HIGH);          
           break;
         }
-        delay(100);
+        delay(10);
       
-      for(j=0;j<numCol;j++)
-      {
+      for(j=0;j<numCol;j++)                           //Sweep nas colunas
+      {                                               //Funcao debouncer nao foi necessaria
         switch(j)
         {
-          case 0:
-            
-            for(k=0;k<maxBounceCount;k++)
-            {
-              
-              temp = digitalRead(PIN_C0);
-
-              
-              if (temp != flagLastButtonState[3*i+j]) {
-
-                j = 0;
-                flagLastButtonState[3*i+j] = temp;
-                if(temp == 1)                
-                  return(3*i+j);               
-                else
-                  return -1;
-              }          
+          case 0:            
+            temp = digitalRead(PIN_C0);             
+            if (temp != flagLastButtonState[3*i+j]) {
+              j = 0;
+              flagLastButtonState[3*i+j] = temp;
+              if(temp == 1)                
+                return(3*i+j);               
+              else
+                return -1;
+            }          
    
-            }           
+                       
             break;
-          case 1:
-            
-            for(k=0;k<maxBounceCount;k++)
-            {
-              
-              temp = digitalRead(PIN_C1);
-              
-              
-              if (temp != flagLastButtonState[3*i+j]) {
-
-                j = 1;
-                flagLastButtonState[3*i+j] = temp;
-                if(temp == 1)                
-                  return(3*i+j);               
-                else
-                  return -1;               
-              }
-            }           
+          case 1:          
+            temp = digitalRead(PIN_C1);
+                        
+            if (temp != flagLastButtonState[3*i+j]) {
+              j = 1;
+              flagLastButtonState[3*i+j] = temp;
+              if(temp == 1)                
+                return(3*i+j);               
+              else
+                return -1;               
+            }
+                     
             break;
           case 2:          
-           
-            for(k=0;k<maxBounceCount;k++)
-            {
-              
-              temp = digitalRead(PIN_C2);
-              
-              
-              if (temp != flagLastButtonState[3*i+j]) {
+                        
+            temp = digitalRead(PIN_C2); 
+            
+            if (temp != flagLastButtonState[3*i+j]) {
 
-                j = 2;
-                flagLastButtonState[3*i+j] = temp;
-                if(temp == 1)                
-                  return(3*i+j);               
-                else
-                  return -1;               
-              }                                              
-            }
+              j = 2;
+              flagLastButtonState[3*i+j] = temp;
+              if(temp == 1)                
+                return(3*i+j);               
+              else
+                return -1;               
+            }                                              
+          
             break;        
         }      
       }
-    }
-    
+    }    
     return -1;
 }
+
+//Disclaimer: funcoes abaixo foram baseadas em snipets obtidas no seguinte forum http://forum.arduino.cc/index.php?topic=62822.0
 
 void eeprom_write_page(byte deviceaddress, unsigned eeaddr,
                       const byte * data, byte length)
