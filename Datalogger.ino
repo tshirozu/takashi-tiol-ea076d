@@ -1,7 +1,7 @@
 /*
- * v1p5
+ * v1p6
  
- Todo: only one time execution when button pressed
+ Todo: Comentar
  
  Added readMatrixKeyboard function;
  
@@ -25,9 +25,9 @@
  * D5 -> C2
  * D6 -> C1
  * D7 -> C0
- 
- */
 
+ * D2 -> LED
+ */
 
 #define PIN_SENSOR A0
 #define PIN_R0 11
@@ -37,6 +37,7 @@
 #define PIN_C0 7
 #define PIN_C1 6
 #define PIN_C2 5
+#define PIN_LED 2
 
  //#########################################################
 
@@ -46,14 +47,15 @@
 #include <stdint.h>
 
 /* Variaveis globais */
-int sensor_luz = 0;
-int reading = 0;
-int memCount = 0;
-int maxBounceCount = 100;
-
-unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
-unsigned long debounceDelay = 10;    // the debounce time; increase if the output flickers
-int lastButtonState = 0;
+  
+int flag_RecordAutomatico = 0; 
+unsigned long lastRecord = 0;                                         //Timestamp 
+int memCount = 0;                                                     //Contador da posicao da memoria
+int maxBounceCount = 1;                                               //Contador para debouncer
+int sensor_luz = 0;                                                   //Valor do sensor depois do ADC
+int flagLastButtonState[12] = {0, 0, 0, 0, 0 ,0 ,0 ,0 ,0 ,0 ,0 ,0};   //Ultimo estado de cada botao do teclado matricial
+char matrix_buffer[10];                                               //Buffer para armazenar os comandos do teclado matricial
+int matrix_buffer_counter = 0;                                        //Contador do buffer
 
 
 /* Rotina auxiliar para comparacao de strings */
@@ -69,9 +71,6 @@ int str_cmp(char *s1, char *s2, int len) {
   return 1;
 }
 
-/* Processo de bufferizacao. Caracteres recebidos sao armazenados em um buffer. Quando um caractere
- *  de fim de linha ('\n') e recebido, todos os caracteres do buffer sao processados simultaneamente.
- */
 
 /* Buffer de dados recebidos */
 #define MAX_BUFFER_SIZE 15
@@ -80,22 +79,7 @@ typedef struct {
   unsigned int tam_buffer;
 } serial_buffer;
 
-/* Teremos somente um buffer em nosso programa, O modificador volatile
- *  informa ao compilador que o conteudo de Buffer pode ser modificado a qualquer momento. Isso
- *  restringe algumas otimizacoes que o compilador possa fazer, evitando inconsistencias em
- *  algumas situacoes (por exemplo, evitando que ele possa ser modificado em uma rotina de interrupcao
- *  enquanto esta sendo lido no programa principal).
- */
 volatile serial_buffer Buffer;
-
-/* Todas as funcoes a seguir assumem que existe somente um buffer no programa e que ele foi
- *  declarado como Buffer. Esse padrao de design - assumir que so existe uma instancia de uma
- *  determinada estrutura - se chama Singleton (ou: uma adaptacao dele para a programacao
- *  nao-orientada-a-objetos). Ele evita que tenhamos que passar o endereco do
- *  buffer como parametro em todas as operacoes (isso pode economizar algumas instrucoes PUSH/POP
- *  nas chamadas de funcao, mas esse nao eh o nosso motivo principal para utiliza-lo), alem de
- *  garantir um ponto de acesso global a todas as informacoes contidas nele.
- */
 
 /* Limpa buffer */
 void buffer_clean() {
@@ -140,22 +124,23 @@ const byte DEVADDR = 0x50;
 
 void setup() {
   /* Inicializacao */
-  
-  
-  buffer_clean();
-  flag_check_command = 0;
-  
-  Wire.begin();
+ 
+  buffer_clean();                                                   //Limpa o buffer da comunicacao serial
+  flag_check_command = 0;                                           //Reset flag command serial
+  matrix_buffer_counter = 0;                                        //Reset buffer da matrix
+  sprintf(matrix_buffer,"         ");                                   
+  Wire.begin();                                                     //Inicia comunicao I2C com memoria
   Serial.begin(9600);
 
   for(int i = 0; i<16*24 ;i+=16)
-    eeprom_erase_page(DEVADDR,i);      
+    eeprom_erase_page(DEVADDR,i);                                   //Apaga conteudo da memoria
       
-  pinMode(PIN_SENSOR,INPUT);
+  pinMode(PIN_SENSOR,INPUT);                                        //Set os pins
   pinMode(PIN_R0,OUTPUT);
   pinMode(PIN_R1,OUTPUT);
   pinMode(PIN_R2,OUTPUT);
   pinMode(PIN_R3,OUTPUT);
+  pinMode(PIN_LED,OUTPUT);
 
   pinMode(PIN_C0,INPUT);
   pinMode(PIN_C1,INPUT);
@@ -164,34 +149,92 @@ void setup() {
 
 
 void loop() {
-  int x, y;
+  
   char out_buffer[10];
-
   int flag_write = 0;
-
-  int matrixKeyboard = readMatrixKeyboard();
+  int matrixKeyboard = readMatrixKeyboard();                        //Realiza varredura no teclado matricial, retornando indice
 
   if(matrixKeyboard != -1)
   {
-
-    Serial.print("Matrix Keyboard read: \n");
-    Serial.print(matrixKeyboard);
-    Serial.print("\n");  
+    matrixKeyboard = convMatrixKeyboard(matrixKeyboard);            //Converte os indices em valores
+    if(matrixKeyboard == 11)
+    {
+      matrix_buffer[matrix_buffer_counter] = 42;                    //Escrita do caracter *
+    }
+    else if(matrixKeyboard == 10)
+    {
+      matrix_buffer[matrix_buffer_counter] = 35;                    //Escrita do caracter #
+    }
+    else
+    {
+      matrix_buffer[matrix_buffer_counter] = matrixKeyboard + 48;   //Escrita de 0~9
+    }
+    if(matrix_buffer_counter >= 2)
+    {
+      matrix_buffer_counter = 0;                                    //Reset matrix buffer se mais que 3 digitos invalidos
+    }
+    else{
+      matrix_buffer_counter++;  
+    }
+    
+    Serial.println(matrix_buffer);    
   }
+   
   
-  
+  Timer1.initialize(1000000);                                       // Chama interrupção periodica
+  Timer1.attachInterrupt(serialEvent);                              // Associa a interrupcao periodica a funcao ISR_timer
 
-  
-  
-  Timer1.initialize(1000000);                       // Chama interrupção periodica
-  Timer1.attachInterrupt(serialEvent);              // Associa a interrupcao periodica a funcao ISR_timer
+  /*
+   * COMANDOS DO TECLADO MATRICIAL
+   */
 
-  /* A flag_check_command permite separar a recepcao de caracteres
+   if(str_cmp(matrix_buffer,"#1*",3))                               //Comando #1*
+   {
+      digitalWrite(PIN_LED,HIGH);                                   //Pisca o LED
+      delay(2000);
+      digitalWrite(PIN_LED,LOW);
+      sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
+   }
+   if(str_cmp(matrix_buffer,"#2*",3))                               //Comando #2*
+   {
+      Serial.println("Begin RECORD process... \n");
+      sensor_luz = analogRead(PIN_SENSOR);                          //Leitura do sensor 0V => 0 ; 5V => 1023
+      sprintf(out_buffer, "%d", sensor_luz);
+      flag_write = 1;                                               //Set flag para print do valor do sensor
+      eeprom_erase_page(DEVADDR,memCount);                          //Apaga a posicao da memoria
+      eeprom_write_page(DEVADDR,memCount,out_buffer, 4);            //Escreve a posicao na posicao da memoria
+
+      if(memCount < 24*(16-1))                                      //Incrementa contador
+        memCount+=16;
+        
+      Serial.println("End RECORD process\n");
+      sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
+      
+   }
+   if(str_cmp(matrix_buffer,"#3*",3))                               //Comando #3*
+   {
+      flag_RecordAutomatico = 1;                                    //Set flag para execucao de RECORD Automatico
+      sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
+      
+   }
+   if(str_cmp(matrix_buffer,"#4*",3))
+   {
+      flag_RecordAutomatico = 0;                                    //Reset flag para execucao de RECORD Automatico
+      sprintf(matrix_buffer,"         ");                           //Reset buffer de comando
+      
+   }
+
+   /* A flag_check_command permite separar a recepcao de caracteres
    *  (vinculada a interrupca) da interpretacao de caracteres. Dessa forma,
    *  mantemos a rotina de interrupcao mais enxuta, enquanto o processo de
    *  interpretacao de comandos - mais lento - nao impede a recepcao de
    *  outros caracteres. Como o processo nao 'prende' a maquina, ele e chamado
    *  de nao-preemptivo.
+   */
+
+   
+  /*
+   * COMANDOS DO TERMINAL SERIAL
    */
 
    
@@ -204,25 +247,6 @@ void loop() {
     if (str_cmp(Buffer.data, "ID", 2) ) {
       sprintf(out_buffer, "DATALOGGER DA ZOEIRA \n");
       flag_write = 1;
-    }
-
-
-    if (str_cmp(Buffer.data, "WRITE", 5) ) {
-        buffer_clean();
-        Serial.println("Begin writing process....\n");
-
-        byte msg0[] = "This is msg 0";
-        byte msg1[] = "Hello World!";
-        byte msg2[] = "Howdy!";
-        byte msg3[] = "LeeeroyJenkins";
-        
-        eeprom_write_page(DEVADDR,0x000,msg0, sizeof(msg0));
-        eeprom_write_page(DEVADDR,0x010,msg1, sizeof(msg1));
-        eeprom_write_page(DEVADDR,0x020,msg2, sizeof(msg2));
-        eeprom_write_page(DEVADDR,0x030,msg3, sizeof(msg3));
-        
-        Serial.println("Memory written\n");    
-        
     }
 
     if (str_cmp(Buffer.data, "TESTE", 5) ) {
@@ -356,7 +380,35 @@ void loop() {
     flag_write = 0;
   }
 
+  if(flag_RecordAutomatico == 1 && (millis()-lastRecord) > 1000)
+  {
+      Serial.println("Begin RECORD process... \n");
+      sensor_luz = analogRead(PIN_SENSOR);           //leitura do sensor 0V => 0 ; 5V => 1023
+      sprintf(out_buffer, "%d", sensor_luz);
+      flag_write = 1;
+      eeprom_erase_page(DEVADDR,memCount);
+      eeprom_write_page(DEVADDR,memCount,out_buffer, 4);     
+      if(memCount < 24*(16-1))
+        memCount+=16;       
+      Serial.println("End RECORD process\n");
+      lastRecord = millis();
+  }
+}
 
+int convMatrixKeyboard(int a)
+{
+  switch(a)
+  {
+    case 9:
+      return 10;
+    case 10:
+      return 0;
+    case 11:
+      return 11;
+    default:
+      return a+1;  
+      
+  }
 }
 
 int readMatrixKeyboard()
@@ -415,58 +467,62 @@ int readMatrixKeyboard()
             {
               
               temp = digitalRead(PIN_C0);
+
               
-              
-              if (temp != 0) {
-                 // reset the debouncing timer
-                lastDebounceTime = millis();
+              if (temp != flagLastButtonState[3*i+j]) {
+
                 j = 0;
-                return(3*i+j);  //NO DEBOUNCE
-              }
-              if ((millis() - lastDebounceTime) > debounceDelay) {
-                if(temp!=0)
-                  return(3*i+j);  
-              }       
+                flagLastButtonState[3*i+j] = temp;
+                if(temp == 1)                
+                  return(3*i+j);               
+                else
+                  return -1;
+              }          
+   
             }           
             break;
           case 1:
             
             for(k=0;k<maxBounceCount;k++)
             {
+              
               temp = digitalRead(PIN_C1);
+              
+              
+              if (temp != flagLastButtonState[3*i+j]) {
 
-              if (temp != 0) {
-                 // reset the debouncing timer
-                lastDebounceTime = millis();
                 j = 1;
-                return(3*i+j);  //NO DEBOUNCE
+                flagLastButtonState[3*i+j] = temp;
+                if(temp == 1)                
+                  return(3*i+j);               
+                else
+                  return -1;               
               }
-              if ((millis() - lastDebounceTime) > debounceDelay) {
-                if(temp!=0)
-                  return(3*i+j);  
-              }       
-            }
-          case 2:
+            }           
+            break;
+          case 2:          
            
             for(k=0;k<maxBounceCount;k++)
             {
+              
               temp = digitalRead(PIN_C2);
+              
+              
+              if (temp != flagLastButtonState[3*i+j]) {
 
-              if (temp != 0) {
-                 // reset the debouncing timer
-                lastDebounceTime = millis();
                 j = 2;
-               
-                return(3*i+j);  //NO DEBOUNCE
-              }
-              if ((millis() - lastDebounceTime) > debounceDelay) {
-                if(temp!=0)
-                  return(3*i+j);  
-              }       
-            }                  
-        }        
-      }      
+                flagLastButtonState[3*i+j] = temp;
+                if(temp == 1)                
+                  return(3*i+j);               
+                else
+                  return -1;               
+              }                                              
+            }
+            break;        
+        }      
+      }
     }
+    
     return -1;
 }
 
