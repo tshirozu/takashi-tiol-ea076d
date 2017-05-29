@@ -3,6 +3,7 @@
 #define PIN_INTERRUPT 2
 
 #include "TimerOne.h"
+#include "Math.h"
 
 
 #define MAX_BUFFER_SIZE 10
@@ -14,9 +15,8 @@ int deltaRpm = 0;
 int pwmValue = 0;
 int sensorCounter = 0;
 
-
-int controlGain = 1;
-float rpm2pwm_constant = 255/2000;
+float controlGain = 1;
+float rpm2pwm_constant = 255.0/2000.0;
 
 int flag_serial_read = 0;
 
@@ -63,28 +63,30 @@ int buffer_add(char c_in) {
 void ISR_timer() {
   
   rpmSensor = sensorCounter*60/2; //2 helices, amostragem 2 segundos
-  Serial.println("Sensor Counter: ");
-  Serial.println(sensorCounter);
-
   
   Serial.println("Sensor RPM: ");
   Serial.println(rpmSensor);
   sensorCounter = 0;
   
   deltaRpm = lastInput - rpmSensor;
-  if (((int)((float)(controlGain*deltaRpm))*rpm2pwm_constant) < 255)
-  {
-    pwmValue += (int)(controlGain*deltaRpm)*rpm2pwm_constant;    
+  Serial.println("Erro: ");
+  Serial.println(deltaRpm);
+  if (pwmValue + rpm2pwm(deltaRpm*controlGain) < 255)
+  {    
+    pwmValue += rpm2pwm(deltaRpm*controlGain);    
   }
   else
+  {    
     pwmValue = 255;
+  }
+
+  if(pwmValue < 0)
+    pwmValue = 0;
 
   Serial.println("pwmValue: ");
   Serial.println(pwmValue);
-  analogWrite(PIN_PWM,128);
+  analogWrite(PIN_PWM,pwmValue);
 
-  Serial.println("lastInput: ");
-  Serial.println(lastInput);
 
   //Lê-se monitor serial
 
@@ -101,6 +103,16 @@ void ISR_timer() {
   }
 }
 
+int rpm2pwm(float rpmValue)
+{
+
+  return int(rpmValue*rpm2pwm_constant);
+}
+
+float pwm2rpm(int pwmValue)
+{
+  return (float)pwmValue/rpm2pwm_constant;
+}
 
 void incInterruptCounter()
 {
@@ -139,5 +151,4 @@ void inputRpm()
   
   flag_serial_read = 0;
 }
-
 
