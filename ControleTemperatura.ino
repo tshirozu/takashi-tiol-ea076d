@@ -2,7 +2,7 @@
 
 /* Definicao dos pinos utilizados
 */
-#define PIN_BULB_PWM 5
+#define PIN_BULB_PWM 2
 #define PIN_FAN_PWM 6                 // Pino de PWM para o driver do motor DC
 #define PIN_SENSOR A1
 
@@ -13,7 +13,7 @@
 #define MAX_BUFFER_SIZE 10
 
 /*Global Variables */
-int lastInput = 0;                // Ultimo valor registrado no monitor serial
+int lastInput = 25;                // Ultimo valor registrado no monitor serial
 int tempSensor = 0;                // Rotacao registrada pelo sensor
 int deltaTemp = 0;                 // Resultado da realimentacao
 int fanPwmValue = 0;                 // 0-255 => correspondente ao DutyCycle do sinal PWM
@@ -83,15 +83,20 @@ void ISR_timer() {
   {
     fanPwmValue = 0;
     bulbPwmValue = 255;
+    digitalWrite(PIN_BULB_PWM,HIGH);
+    digitalWrite(PIN_FAN_PWM,LOW);
+    
   }
   else if(deltaTemp < 0)
   {
-    fanPwmValue = 255
+    fanPwmValue = 255;
     bulbPwmValue = 0;
+    digitalWrite(PIN_BULB_PWM,LOW);
+    digitalWrite(PIN_FAN_PWM,HIGH);
   }
     
-  analogWrite(PIN_FAN_PWM,fanPwmValue);                     //Atualiza o Duty Cycle do sinal
-  analogWrite(PIN_BULB_PWM,bulbPwmValue);                  //Atualiza o Duty Cycle do sinal
+  
+
 
 
 
@@ -127,12 +132,12 @@ void setup() {
 
 int sensor2temp(int sensorValue)
 {
-  return 25;
+  return (int)(((float)sensorValue-174.0)/(float)2.4)+25; //Linearizacao ao redor de 25ºC => 174 un. Slope = 2.4 un/ºC
 }
 
 void loop() {
   
-  Timer1.initialize(200000);                                      // Chama interrupção periodica a cada 2s
+  Timer1.initialize(2000000);                                      // Chama interrupção periodica a cada 2s
   Timer1.attachInterrupt(ISR_timer);                              // Associa a interrupcao periodica a funcao ISR_timer
 
   if(flag_serial_read == 1)                                       //Se houve uma leitura no terminal serial
@@ -150,5 +155,4 @@ void inputTemp()
   buffer_clean();  
   flag_serial_read = 0;
 }
-
 
