@@ -2,9 +2,9 @@
 
 /* Definicao dos pinos utilizados
 */
-#define PIN_BULB_PWM 2
-#define PIN_FAN_PWM 6                 // Pino de PWM para o driver do motor DC
-#define PIN_SENSOR A1
+#define PIN_BULB 2					// Pino de acionamento da lâmpada
+#define PIN_FAN 6                 	// Pino de acionamento do cooler
+#define PIN_SENSOR A1				// Pino ADC do sensor de temperatura
 
 #include "TimerOne.h"
 #include "Math.h"
@@ -13,11 +13,11 @@
 #define MAX_BUFFER_SIZE 10
 
 /*Global Variables */
-int lastInput = 25;                // Ultimo valor registrado no monitor serial
-int tempSensor = 0;                // Rotacao registrada pelo sensor
-int deltaTemp = 0;                 // Resultado da realimentacao
-int fanPwmValue = 0;                 // 0-255 => correspondente ao DutyCycle do sinal PWM
-int bulbPwmValue = 0;                 // 0-255 => correspondente ao DutyCycle do sinal PWM
+int lastInput = 25;                		// Ultimo valor registrado no monitor serial; inicialização na temperatura ambiente
+int tempSensor = 0;                		// Leitura do sensor
+int deltaTemp = 0;                 		// Resultado da realimentacao
+int fanPwmValue = 0;                 	// 0-255 => correspondente ao DutyCycle do sinal PWM
+int bulbPwmValue = 0;                 	// 0-255 => correspondente ao DutyCycle do sinal PWM
 
 
 //Funcoes para a comunicao serial
@@ -79,10 +79,10 @@ void ISR_timer() {
     }
   }
 
-  tempSensor = sensor2temp(analogRead(PIN_SENSOR));
+  tempSensor = sensor2temp(analogRead(PIN_SENSOR));				//Conversao do valor do ADC para temperatura
   
   
-  Serial.println("Temperatura: ");     //Print valor da rotacao
+  Serial.println("Temperatura: ");     //Print valor da temperatura
   Serial.println(tempSensor);
   
   
@@ -92,69 +92,56 @@ void ISR_timer() {
   Serial.println("------------------------------------");
 
 
-  if(deltaTemp > 2)
-  {
-    fanPwmValue = 0;
-    bulbPwmValue = 255;
-    digitalWrite(PIN_BULB_PWM,HIGH);
-    digitalWrite(PIN_FAN_PWM,LOW);
+  if(deltaTemp > 2)							//Limite inferior para reiniciar o aquecimento; só reinicia o aquecimento caso a temperatura esteja 3 graus abaixo do input
+  {    
+    digitalWrite(PIN_BULB,HIGH);
+    digitalWrite(PIN_FAN,LOW);
     
   }
-  else if(deltaTemp <=0 )
-  {
-    fanPwmValue = 255;
-    bulbPwmValue = 0;
-    digitalWrite(PIN_BULB_PWM,LOW);
-    digitalWrite(PIN_FAN_PWM,HIGH);
+  else if(deltaTemp <=0 )					//Limite superior para desligar o aquecimento
+  {   
+    digitalWrite(PIN_BULB,LOW);
+    digitalWrite(PIN_FAN,HIGH);
   }
     
-  
-
-
-
-
-  
-
 }
 
-/*
-  Funcao rpm2pwm: Converte valor de RPM para valor PWM correspondente
-*/
 
-
-
-
-void setup() {  
-  pinMode(PIN_FAN_PWM,OUTPUT);      //Sinal de PWM como OUTPUT    
-  pinMode(PIN_BULB_PWM,OUTPUT);      //Sinal de PWM como OUTPUT    
-  pinMode(PIN_SENSOR,INPUT);
-  Serial.begin(9600);           //Seta comunicacao UART
-  
-}
 
 int sensor2temp(int sensorValue)
 {
-  return (int)(((float)sensorValue-174.0)/(float)2.4)+25; //Linearizacao ao redor de 25ºC => 174 un. Slope = 2.4 un/ºC
+  return (int)(((float)sensorValue-174.0)/(float)2.4)+25; 			//Linearizacao ao redor de 25ºC => 174 un. Slope = 2.4 un/ºC
 }
-
-void loop() {
-  
-  Timer1.initialize(5000000);                                      // Chama interrupção periodica a cada 5s
-  Timer1.attachInterrupt(ISR_timer);                              // Associa a interrupcao periodica a funcao ISR_timer
-
-  if(flag_serial_read == 1)                                       //Se houve uma leitura no terminal serial
-    inputTemp();                                                   
-    
-}
-
 
 void inputTemp()
 {
   Serial.println("Input serial"); 
   int x = 0;
   sscanf(Buffer.data,"%d", &x);
-  lastInput = x;                                                //Salva-se a variavel num variavel global
+  lastInput = x;                                                //Salva-se a variavel numa variavel global
   buffer_clean();  
   flag_serial_read = 0;
 }
+
+
+void setup() {  
+  pinMode(PIN_FAN,OUTPUT);      		//Sinal digital do cooler
+  pinMode(PIN_BULB,OUTPUT);     		//Sinal digital da lampada
+  pinMode(PIN_SENSOR,INPUT);			//Pino do sensor	
+  Serial.begin(9600);           		//Seta comunicacao UART
+  
+}
+
+
+void loop() {
+  
+  Timer1.initialize(5000000);                                       // Chama interrupção periodica a cada 5s
+  Timer1.attachInterrupt(ISR_timer);                                // Associa a interrupcao periodica a funcao ISR_timer
+
+  if(flag_serial_read == 1)                                         //Se houve uma leitura no terminal serial
+    inputTemp();                                                   
+    
+}
+
+
 
