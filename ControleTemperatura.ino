@@ -66,6 +66,19 @@ int buffer_add(char c_in) {
 
 void ISR_timer() {
 
+    //Lê-se monitor serial para inputs do usuario
+  char c;
+  while (Serial.available()>0) {
+    c = Serial.read();
+
+    if (c=='\n') {
+      buffer_add('\0'); /* Se recebeu um fim de linha, coloca um terminador de string no buffer */
+      flag_serial_read = 1;
+    } else {
+     buffer_add(c);
+    }
+  }
+
   tempSensor = sensor2temp(analogRead(PIN_SENSOR));
   
   
@@ -79,7 +92,7 @@ void ISR_timer() {
   Serial.println("------------------------------------");
 
 
-  if(deltaTemp > 0)
+  if(deltaTemp > 2)
   {
     fanPwmValue = 0;
     bulbPwmValue = 255;
@@ -87,7 +100,7 @@ void ISR_timer() {
     digitalWrite(PIN_FAN_PWM,LOW);
     
   }
-  else if(deltaTemp < 0)
+  else if(deltaTemp <=0 )
   {
     fanPwmValue = 255;
     bulbPwmValue = 0;
@@ -101,18 +114,7 @@ void ISR_timer() {
 
 
   
-  //Lê-se monitor serial para inputs do usuario
-  char c;
-  while (Serial.available()>0) {
-    c = Serial.read();
 
-    if (c=='\n') {
-      buffer_add('\0'); /* Se recebeu um fim de linha, coloca um terminador de string no buffer */
-      flag_serial_read = 1;
-    } else {
-     buffer_add(c);
-    }
-  }
 }
 
 /*
@@ -137,7 +139,7 @@ int sensor2temp(int sensorValue)
 
 void loop() {
   
-  Timer1.initialize(2000000);                                      // Chama interrupção periodica a cada 2s
+  Timer1.initialize(5000000);                                      // Chama interrupção periodica a cada 5s
   Timer1.attachInterrupt(ISR_timer);                              // Associa a interrupcao periodica a funcao ISR_timer
 
   if(flag_serial_read == 1)                                       //Se houve uma leitura no terminal serial
